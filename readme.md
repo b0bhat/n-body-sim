@@ -10,9 +10,9 @@ Notes:
 - Can define bodies as immobile.
 
 TODO
-- Optimization, approximate mean gravital influence (approaching the 5000 body mark, the simulation experiences extreme slowdown)
+- Optimization, approximate mean influence
 - Optimization, culling range for gravital effect
-- CUDA optimization
+- using CUDA for fast calculations
 - (inelastic) collisions between masses which result in one larger mass
 - Nicer looking points using an actual shader
 
