@@ -1,0 +1,25 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build with MinGW",
+            "type": "shell",
+            "command": "g++",
+            "args": [
+                "-g",
+                "-o",
+                "simulator.exe",
+                "simulator.cpp",
+                "-lglfw3",
+                "-lopengl32",
+                "-lgdi32",
+                "-IC:/ProgramData/glfw/include",
+                "-LC:/ProgramData/glfw/lib"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            }
+        }
+    ]
+}
