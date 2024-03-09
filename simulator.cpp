@@ -1,8 +1,11 @@
 #include <iostream>
+#include <fstream>
+#include <string>
 #include <vector>
 #include <random>
 #include <cmath>
 #include <algorithm>
+#include <windows.h>
 #include <GLFW/glfw3.h>
 
 struct Color {
@@ -26,6 +29,24 @@ struct Body {
     Body(double x_, double y_, double vx_, double vy_, double mass_, bool mobile_, bool massive_, bool collision_, bool alive_, Color color_) :
             x(x_), y(y_), vx(vx_), vy(vy_), mass(mass_), mobile(mobile_), massive(massive_), collision(collision_), alive(alive_), color(color_) {}
 };
+
+bool isSpacePressed() {
+    HWND foregroundWindow = GetForegroundWindow();
+    DWORD currentProcessId;
+    GetWindowThreadProcessId(foregroundWindow, &currentProcessId);
+    DWORD thisProcessId = GetCurrentProcessId();
+    if (currentProcessId != thisProcessId) {
+        return false;
+    }
+    return GetAsyncKeyState(VK_SPACE) & 0x8000;
+}
+
+void restartExecutable() {
+    char exePath[MAX_PATH];
+    GetModuleFileName(NULL, exePath, MAX_PATH);
+    ShellExecute(NULL, "open", exePath, NULL, NULL, SW_SHOWNORMAL);
+    exit(0);
+}
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     int i = floor(h * 6);
@@ -108,13 +129,21 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         particle->x += particle->vx * dt;
         particle->y += particle->vy * dt;
         particle->orbit.push_back({particle->x, particle->y});
-        while (particle->orbit.size() > 750) {
+        while (particle->orbit.size() > 1000) {
             particle->orbit.erase(particle->orbit.begin());
         }
     }
 }
 
-void drawOrbit(const Body& particle) {
+void drawOrbit(const Body& particle, float trailAlpha) {
+    glBegin(GL_LINE_STRIP);
+    for (size_t i = 0; i < particle.orbit.size(); ++i) {
+        double alpha = particle.currentAlpha - std::pow(trailAlpha, static_cast<double>(i) / particle.orbit.size());
+        //std::cout << alpha << std::endl;
+        glColor4f(particle.color.r, particle.color.g, particle.color.b, alpha);
+        glVertex2d(particle.orbit[i].first, particle.orbit[i].second);
+    }
+    glEnd();
     if (particle.alive) {
         double trailLength = std::sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
         glBegin(GL_LINE_STRIP);
@@ -127,33 +156,52 @@ void drawOrbit(const Body& particle) {
     } else {
         particle.currentAlpha = std::max(particle.currentAlpha - 0.01, 0.0);
     }
-    glBegin(GL_LINE_STRIP);
-    for (size_t i = 0; i < particle.orbit.size(); ++i) {
-        double alpha = particle.currentAlpha - std::pow(0.4, static_cast<double>(i) / particle.orbit.size());
-        //std::cout << alpha << std::endl;
-        glColor4f(particle.color.r, particle.color.g, particle.color.b, alpha);
-        glVertex2d(particle.orbit[i].first, particle.orbit[i].second);
-    }
-    glEnd();
 }
 
 int main() {
-    const double dt = 0.001;
-    bool singleStart = true;
-    const double numBodiesGenerator = 500;
-    double singleStartDelta = 0.00001;
+    std::ifstream inputFile("settings.txt");
+    if (!inputFile.is_open()) {
+        std::cerr << "Error opening settings file." << std::endl;
+        return 1;
+    }
+    double dt;
+    int singleStart;
+    int numBodiesGenerator;
+    double singleStartDelta;
+    int collidingBodies, numMainBodies;
+    float trailAlpha;
+    double minMass, maxMass, minHueSize, maxHueSize, minVel, maxVel, minRadius, maxRadius;
+    inputFile >> dt >> singleStart >> numBodiesGenerator >> singleStartDelta >> collidingBodies >> numMainBodies >> trailAlpha
+              >> minMass >> maxMass >> minHueSize >> maxHueSize >> minVel >> maxVel >> minRadius >> maxRadius;
+    inputFile.close();
+    std::cout << "dt: " << dt << std::endl;
+    std::cout << "singleStart: " << singleStart << std::endl;
+    std::cout << "numBodiesGenerator: " << numBodiesGenerator << std::endl;
+    std::cout << "singleStartDelta: " << singleStartDelta << std::endl;
+    std::cout << "collidingBodies: " << collidingBodies << std::endl;
+    std::cout << "numMainBodies: " << numMainBodies << std::endl;
+    std::cout << "trailAlpha: " << trailAlpha << std::endl;
+    std::cout << "minMass: " << minMass << std::endl;
+    std::cout << "maxMass: " << maxMass << std::endl;
+    std::cout << "minHueSize: " << minHueSize << std::endl;
+    std::cout << "maxHueSize: " << maxHueSize << std::endl;
+    std::cout << "minVel: " << minVel << std::endl;
+    std::cout << "maxVel: " << maxVel << std::endl;
+    std::cout << "minRadius: " << minRadius << std::endl;
+    std::cout << "maxRadius: " << maxRadius << std::endl;
+
+    std::cout << "Press SPACE to restart." << std::endl;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     //std::uniform_int_distribution<> sign_dist(0, 1);
     //std::uniform_real_distribution<double> pos_dist(-0.4, 0.4);
-    std::uniform_real_distribution<double> vel_dist(-3, 3);
-    std::uniform_real_distribution<double> mass_dist(1e1, 1e4);
+    std::uniform_real_distribution<double> mass_dist(minMass, maxMass);
+    std::uniform_real_distribution<double> hue_size_dist(minHueSize, maxHueSize);
+    std::uniform_real_distribution<double> vel_dist(minVel, maxVel);
+    std::uniform_real_distribution<double> radius_dist(minRadius, maxRadius);
+
     std::uniform_real_distribution<double> color_dist(0.0, 1.0);
-
-    std::uniform_real_distribution<double> hue_size_dist(0.3, 0.5);
-
-    std::uniform_real_distribution<double> radius_dist(0.4, 0.5);
     std::uniform_real_distribution<double> angle_dist(0.0, 2.0 * std::acos(-1.0));
     double radius = radius_dist(gen);
     double angle = angle_dist(gen);
@@ -183,11 +231,14 @@ int main() {
         bool mobile = true;
         bool massive = true;
         bool collision = false;
+        if (collidingBodies == 1) {
+            collision = true;
+        } 
         bool alive = true;
         float hue = hue_range_dist(gen);
         float lightness = color_dist(gen);
         // Color color = Color(color_dist(gen), color_dist(gen), color_dist(gen));
-        if (singleStart) {
+        if (singleStart == 1) {
             x = x_dist(gen);
             y = y_dist(gen);
             vx = vx_s;
@@ -199,16 +250,21 @@ int main() {
             hue = fmod(hue + 1.0f, 1.0f);
             hue = colorStart + hue * (colorEnd - colorStart);
         }
-        lightness = std::min(lightness+0.1, 1.0);
+        lightness = std::min(lightness+0.2, 1.0);
         float r, g, b;
         hsvToRgb(hue, 1.0f, lightness, r, g, b);
         Color color = Color(r,g,b);
         particles.emplace_back(x, y, vx, vy, mass, mobile, massive, collision, alive, color);
     }
-    //particles.emplace_back(0.0, 0.15, 0.0, 0.0, 1e7, false, true, true, false, Color(1.0, 1.0, 1.0));
-    particles.emplace_back(0.0, 0.15, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
-    particles.emplace_back(0.1, 0.0, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
-    particles.emplace_back(-0.1, 0.0, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
+    if (numMainBodies == 1) {
+        particles.emplace_back(0.0, 0.0, 0.0, 0.0, 1e7, false, true, false, true, Color(1.0, 1.0, 1.0));
+    } else if (numMainBodies >= 2) {
+        particles.emplace_back(-0.1, 0.0, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
+        particles.emplace_back(0.1, 0.0, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
+    }
+    if (numMainBodies == 3) {
+        particles.emplace_back(0.0, 0.15, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
+    }
 
     for (auto& particle : particles) {
         if (particle.massive) {
@@ -238,10 +294,14 @@ int main() {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     while (!glfwWindowShouldClose(window)) {
+        if (isSpacePressed()) {
+            std::cout << "Spacebar pressed. Restarting the executable..." << std::endl;
+            restartExecutable();
+        }
         updateBodies(particles, massiveParticles, mobileParticles, dt);
         glClear(GL_COLOR_BUFFER_BIT);
         for (const auto& particle : particles) {
-            drawOrbit(particle);
+            drawOrbit(particle, trailAlpha);
             if (particle.alive) {
                 glPointSize(std::log(particle.mass)/3);
                 glBegin(GL_POINTS);
