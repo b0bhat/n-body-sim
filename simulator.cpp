@@ -5,6 +5,7 @@
 #include <random>
 #include <cmath>
 #include <algorithm>
+#include <chrono>
 #include <windows.h>
 #include <GLFW/glfw3.h>
 
@@ -31,6 +32,15 @@ struct Body {
     Body(double x_, double y_, double vx_, double vy_, double mass_, bool mobile_, bool massive_, bool collision_, bool alive_, Color color_) :
             x(x_), y(y_), vx(vx_), vy(vy_), mass(mass_), mobile(mobile_), massive(massive_), collision(collision_), alive(alive_), color(color_) {}
 };
+
+struct CollisionPoint {
+    float x;
+    float y;
+    double mass;
+    std::chrono::time_point<std::chrono::steady_clock> timestamp;
+};
+
+std::vector<CollisionPoint> collisionPoints;
 
 bool isSpacePressed() {
     HWND foregroundWindow = GetForegroundWindow();
@@ -82,6 +92,15 @@ void calculateForce(const Body& p1, const Body& p2, double& fx, double& fy) {
     }
 }
 
+// void drawCollisionDot(float x, float y, double mass) {
+//     std::cout << "collision" << std::endl;
+//     glPointSize(std::log(mass)/2);
+//     glBegin(GL_POINTS);
+//     glColor3f(1.0f, 1.0f, 1.0f);
+//     glVertex2f(x, y);
+//     glEnd();
+// }
+
 void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles) {
     bool collided = false;
     for (size_t j = 0; j < mobileParticles.size(); ++j) {
@@ -91,14 +110,26 @@ void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std:
         }
         double dx = particle->x - other->x;
         double dy = particle->y - other->y;
-        double distance = std::sqrt(dx * dx + dy * dy);
-        if (distance < 0.001f) {
-            particle->mass += other->mass;
-            particle->vx = (particle->mass * particle->vx + other->mass * other->vx) / (particle->mass + other->mass);
-            particle->vy = (particle->mass * particle->vy + other->mass * other->vy) / (particle->mass + other->mass);
-            other->alive = false;
-            collided = true;
-            break;
+        double distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared < 0.001f * 0.001f) {
+            if (other->massive && !other->mobile) {
+                particle->alive = false;
+                return;
+            } else {
+                double totalMass = particle->mass + other->mass;
+                particle->vx = (particle->mass * particle->vx + other->mass * other->vx) / totalMass;
+                particle->vy = (particle->mass * particle->vy + other->mass * other->vy) / totalMass;
+                particle->mass = totalMass; 
+                other->alive = false;
+                collided = true;
+                CollisionPoint point;
+                point.x = particle->x;
+                point.y = particle->y;
+                point.mass = totalMass;
+                point.timestamp = std::chrono::steady_clock::now();
+                collisionPoints.push_back(point);
+                break;
+            }
         }
     }
     if (collided) {
@@ -107,13 +138,13 @@ void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std:
 }
 
 void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
+    const size_t maxOrbitSize = 1000;
     for (auto& particle : mobileParticles) {
+        if (particle->alive && particle->collision) {
+            handleCollisions(particle, massiveParticles, mobileParticles);
+        }
         if (!particle->alive) {
             continue;
-        }
-        //std::cout << particle->alive << std::endl;
-        if (particle->collision) {
-            handleCollisions(particle, massiveParticles, mobileParticles);
         }
         double fx = 0.0, fy = 0.0;
         for (const auto& other : massiveParticles) {
@@ -131,8 +162,27 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         particle->x += particle->vx * dt;
         particle->y += particle->vy * dt;
         particle->orbit.push_back({particle->x, particle->y});
-        while (particle->orbit.size() > 1000) {
+        while (particle->orbit.size() > maxOrbitSize) {
             particle->orbit.erase(particle->orbit.begin());
+        }
+    }
+}
+
+
+void drawCollisionDots() {
+    auto currentTime = std::chrono::steady_clock::now();
+    for (auto it = collisionPoints.begin(); it != collisionPoints.end();) {
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - it->timestamp).count();
+        if (elapsedTime >= 500) {
+            it = collisionPoints.erase(it);
+        } else {
+            float alpha = std::exp(-elapsedTime / 200.0f);
+            glPointSize(std::log(it->mass) * alpha);
+            glBegin(GL_POINTS);
+            glColor4f(1.0f, 1.0f, 1.0f, alpha);
+            glVertex2f(it->x, it->y);
+            ++it;
+            glEnd();
         }
     }
 }
@@ -222,7 +272,7 @@ int main() {
     std::uniform_real_distribution<double> mass_dist(minMass, maxMass);
     std::uniform_real_distribution<double> hue_size_dist(minHueSize, maxHueSize);
 
-    std::uniform_real_distribution<double> color_dist(0.0, 1.0);
+    std::uniform_real_distribution<double> color_dist(0.3, 1.0);
     double x_s, y_s, vx_s, vy_s;
     computePosVel(x_s, y_s, vx_s, vy_s, minVel, maxVel, minRadius, maxRadius, gen);
     std::uniform_real_distribution<double> x_dist(x_s, x_s + singleStartDelta);
@@ -262,7 +312,6 @@ int main() {
             hue = fmod(hue + 1.0f, 1.0f);
             hue = colorStart + hue * (colorEnd - colorStart);
         }
-        lightness = std::min(lightness+0.2, 1.0);
         float r, g, b;
         hsvToRgb(hue, 1.0f, lightness, r, g, b);
         Color color = Color(r,g,b);
@@ -310,8 +359,8 @@ int main() {
             std::cout << "Spacebar pressed. Restarting the executable..." << std::endl;
             restartExecutable();
         }
-        updateBodies(particles, massiveParticles, mobileParticles, dt);
         glClear(GL_COLOR_BUFFER_BIT);
+        drawCollisionDots();
         for (const auto& particle : particles) {
             drawOrbit(particle, trailAlpha);
             if (particle.alive) {
@@ -322,6 +371,7 @@ int main() {
                 glEnd();
             }
         }
+        updateBodies(particles, massiveParticles, mobileParticles, dt);
         glfwSwapBuffers(window);
         glfwPollEvents();
     }
