@@ -8,6 +8,8 @@
 #include <windows.h>
 #include <GLFW/glfw3.h>
 
+const double pi = std::acos(-1.0);
+
 struct Color {
     float r, g, b, a;
     Color(float red, float green, float blue, float alpha = 1.0f)
@@ -158,6 +160,28 @@ void drawOrbit(const Body& particle, float trailAlpha) {
     }
 }
 
+void computePosVel(
+    double& x, double& y, double& vx, double& vy, 
+    double minVel, double maxVel, double minRadius, double maxRadius,
+    std::mt19937& gen) {
+    std::uniform_real_distribution<double> vel_dist(minVel, maxVel);
+    std::uniform_real_distribution<double> radius_dist(minRadius, maxRadius);
+    std::uniform_real_distribution<double> angle_dist(0.0, 2.0 * pi);
+    double radius = radius_dist(gen);
+    double angle = angle_dist(gen);
+
+    x = radius * cos(angle);
+    y = radius * sin(angle);
+    double tangent_angle = atan2(y, x) + pi / 2;
+    std::uniform_real_distribution<double> velocity_angle_dist(tangent_angle - pi / 5, tangent_angle + pi / 5);
+    double velocity_angle = velocity_angle_dist(gen);
+    double vel_amount = vel_dist(gen);
+    std::uniform_int_distribution<int> sign_gen(0, 1);
+    int sign = sign_gen(gen) * 2 - 1;
+    vx = sign * cos(velocity_angle) * vel_amount;
+    vy = sign * sin(velocity_angle) * vel_amount;
+}
+
 int main() {
     std::ifstream inputFile("settings.txt");
     if (!inputFile.is_open()) {
@@ -165,21 +189,20 @@ int main() {
         return 1;
     }
     double dt;
-    int singleStart;
-    int numBodiesGenerator;
+    int singleStart, numBodiesGenerator, collidingBodies, numMainBodies;
     double singleStartDelta;
-    int collidingBodies, numMainBodies;
     float trailAlpha;
     double minMass, maxMass, minHueSize, maxHueSize, minVel, maxVel, minRadius, maxRadius;
-    inputFile >> dt >> singleStart >> numBodiesGenerator >> singleStartDelta >> collidingBodies >> numMainBodies >> trailAlpha
-              >> minMass >> maxMass >> minHueSize >> maxHueSize >> minVel >> maxVel >> minRadius >> maxRadius;
+    inputFile >> dt >> singleStart >> numBodiesGenerator >> collidingBodies >> numMainBodies
+        >> singleStartDelta >> trailAlpha >> minMass >> maxMass >> minHueSize >> maxHueSize
+        >> minVel >> maxVel >> minRadius >> maxRadius;
     inputFile.close();
     std::cout << "dt: " << dt << std::endl;
     std::cout << "singleStart: " << singleStart << std::endl;
     std::cout << "numBodiesGenerator: " << numBodiesGenerator << std::endl;
-    std::cout << "singleStartDelta: " << singleStartDelta << std::endl;
     std::cout << "collidingBodies: " << collidingBodies << std::endl;
     std::cout << "numMainBodies: " << numMainBodies << std::endl;
+    std::cout << "singleStartDelta: " << singleStartDelta << std::endl;
     std::cout << "trailAlpha: " << trailAlpha << std::endl;
     std::cout << "minMass: " << minMass << std::endl;
     std::cout << "maxMass: " << maxMass << std::endl;
@@ -198,35 +221,24 @@ int main() {
     //std::uniform_real_distribution<double> pos_dist(-0.4, 0.4);
     std::uniform_real_distribution<double> mass_dist(minMass, maxMass);
     std::uniform_real_distribution<double> hue_size_dist(minHueSize, maxHueSize);
-    std::uniform_real_distribution<double> vel_dist(minVel, maxVel);
-    std::uniform_real_distribution<double> radius_dist(minRadius, maxRadius);
 
     std::uniform_real_distribution<double> color_dist(0.0, 1.0);
-    std::uniform_real_distribution<double> angle_dist(0.0, 2.0 * std::acos(-1.0));
-    double radius = radius_dist(gen);
-    double angle = angle_dist(gen);
-    double x_s = radius * cos(angle);
-    double y_s = radius * sin(angle);
+    double x_s, y_s, vx_s, vy_s;
+    computePosVel(x_s, y_s, vx_s, vy_s, minVel, maxVel, minRadius, maxRadius, gen);
+    std::uniform_real_distribution<double> x_dist(x_s, x_s + singleStartDelta);
+    std::uniform_real_distribution<double> y_dist(y_s, y_s + singleStartDelta);
 
     double colorStart = color_dist(gen);
     double colorEnd = colorStart + hue_size_dist(gen);
     std::uniform_real_distribution<double> hue_range_dist(colorStart, colorEnd);
 
-    double vx_s = vel_dist(gen)/1.5;
-    double vy_s = vel_dist(gen)/1.5;
-    std::uniform_real_distribution<double> x_dist(x_s, x_s + singleStartDelta);
-    std::uniform_real_distribution<double> y_dist(y_s, y_s + singleStartDelta);
-
     std::vector<Body> particles;
     std::vector<Body*> massiveParticles;
     std::vector<Body*> mobileParticles;
     for (int i = 0; i < numBodiesGenerator; ++i) {
-        radius = radius_dist(gen);
-        angle = angle_dist(gen);
-        double x = radius * cos(angle);
-        double y = radius * sin(angle);
-        double vx = vel_dist(gen);
-        double vy = vel_dist(gen);
+        
+        double x, y, vx, vy;
+        computePosVel(x, y, vx, vy, minVel, maxVel, minRadius, maxRadius, gen);
         double mass = mass_dist(gen);
         bool mobile = true;
         bool massive = true;
@@ -241,8 +253,8 @@ int main() {
         if (singleStart == 1) {
             x = x_dist(gen);
             y = y_dist(gen);
-            vx = vx_s;
-            vy = vy_s;
+            vx = vx_s/2;
+            vy = vy_s/2;
             mass = 1e2;
             massive = false;
             //float hue = hue_range_dist(gen);
