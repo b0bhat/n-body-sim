@@ -1,44 +1,4 @@
-#include <iostream>
-#include <fstream>
-#include <string>
-#include <vector>
-#include <random>
-#include <cmath>
-#include <algorithm>
-#include <chrono>
-#include <windows.h>
-#include <GLFW/glfw3.h>
-
-const double pi = std::acos(-1.0);
-
-struct Color {
-    float r, g, b, a;
-    Color(float red, float green, float blue, float alpha = 1.0f)
-        : r(red), g(green), b(blue), a(alpha) {}
-};
-
-struct Body {
-    double x, y;
-    double vx, vy;
-    double mass;
-    bool mobile;
-    bool massive;
-    bool collision;
-    bool alive;
-    Color color;
-    std::vector<std::pair<double, double>> orbit;
-    mutable double currentAlpha = 0.8;
-
-    Body(double x_, double y_, double vx_, double vy_, double mass_, bool mobile_, bool massive_, bool collision_, bool alive_, Color color_) :
-            x(x_), y(y_), vx(vx_), vy(vy_), mass(mass_), mobile(mobile_), massive(massive_), collision(collision_), alive(alive_), color(color_) {}
-};
-
-struct CollisionPoint {
-    float x;
-    float y;
-    double mass;
-    std::chrono::time_point<std::chrono::steady_clock> timestamp;
-};
+#include "simulator.h"
 
 std::vector<CollisionPoint> collisionPoints;
 
@@ -53,11 +13,9 @@ bool isSpacePressed() {
     return GetAsyncKeyState(VK_SPACE) & 0x8000;
 }
 
-void restartExecutable() {
-    char exePath[MAX_PATH];
-    GetModuleFileName(NULL, exePath, MAX_PATH);
-    ShellExecute(NULL, "open", exePath, NULL, NULL, SW_SHOWNORMAL);
-    exit(0);
+void restartExecutable(GLFWwindow* window) {
+    std::cout << "Restarting...\n";
+    run(window);
 }
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
@@ -77,29 +35,18 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     }
 }
 
-const double G = 6.67430e-7;
-
 void calculateForce(const Body& p1, const Body& p2, double& fx, double& fy) {
     double dx = p2.x - p1.x;
     double dy = p2.y - p1.y;
     double distance = std::max(std::sqrt(dx * dx + dy * dy), 0.1);
     fx = 0.0;
     fy = 0.0;
-    if (distance <= 1.5) {
+    if (distance <= 1.0) {
         double force = (G * p1.mass * p2.mass) / (distance * distance);
         fx = force * (dx / distance);
         fy = force * (dy / distance);
     }
 }
-
-// void drawCollisionDot(float x, float y, double mass) {
-//     std::cout << "collision" << std::endl;
-//     glPointSize(std::log(mass)/2);
-//     glBegin(GL_POINTS);
-//     glColor3f(1.0f, 1.0f, 1.0f);
-//     glVertex2f(x, y);
-//     glEnd();
-// }
 
 void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles) {
     bool collided = false;
@@ -164,6 +111,9 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         particle->orbit.push_back({particle->x, particle->y});
         while (particle->orbit.size() > maxOrbitSize) {
             particle->orbit.erase(particle->orbit.begin());
+        }
+        if (std::sqrt(std::pow(particle->x, 2) + std::pow(particle->y, 2)) > 1.5) {
+            particle->alive = false;
         }
     }
 }
@@ -232,11 +182,11 @@ void computePosVel(
     vy = sign * sin(velocity_angle) * vel_amount;
 }
 
-int main() {
+void run(GLFWwindow* window) {
     std::ifstream inputFile("settings.txt");
     if (!inputFile.is_open()) {
         std::cerr << "Error opening settings file." << std::endl;
-        return 1;
+        return;
     }
     double dt;
     int singleStart, numBodiesGenerator, collidingBodies, numMainBodies;
@@ -267,8 +217,6 @@ int main() {
 
     std::random_device rd;
     std::mt19937 gen(rd());
-    //std::uniform_int_distribution<> sign_dist(0, 1);
-    //std::uniform_real_distribution<double> pos_dist(-0.4, 0.4);
     std::uniform_real_distribution<double> mass_dist(minMass, maxMass);
     std::uniform_real_distribution<double> hue_size_dist(minHueSize, maxHueSize);
 
@@ -285,6 +233,9 @@ int main() {
     std::vector<Body> particles;
     std::vector<Body*> massiveParticles;
     std::vector<Body*> mobileParticles;
+
+    collisionPoints.clear();
+
     for (int i = 0; i < numBodiesGenerator; ++i) {
         
         double x, y, vx, vy;
@@ -299,7 +250,6 @@ int main() {
         bool alive = true;
         float hue = hue_range_dist(gen);
         float lightness = color_dist(gen);
-        // Color color = Color(color_dist(gen), color_dist(gen), color_dist(gen));
         if (singleStart == 1) {
             x = x_dist(gen);
             y = y_dist(gen);
@@ -307,7 +257,6 @@ int main() {
             vy = vy_s/2;
             mass = 1e2;
             massive = false;
-            //float hue = hue_range_dist(gen);
             float hue = static_cast<float>((x - x_s) / singleStartDelta);
             hue = fmod(hue + 1.0f, 1.0f);
             hue = colorStart + hue * (colorEnd - colorStart);
@@ -339,25 +288,15 @@ int main() {
         }
     }
 
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW" << std::endl;
-        return -1;
-    }
-
-    GLFWwindow* window;
-    window = glfwCreateWindow(800, 800, "N-Body Simulation", NULL, NULL);
-    if (!window) {
-        glfwTerminate();
-        std::cerr << "Failed to create GLFW window" << std::endl;
-        return -1;
-    }
-    glfwMakeContextCurrent(window);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    auto start_time = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window)) {
         if (isSpacePressed()) {
-            std::cout << "Spacebar pressed. Restarting the executable..." << std::endl;
-            restartExecutable();
+            restartExecutable(window);
+        }
+        auto current_time = std::chrono::steady_clock::now();
+        auto elapsed_time = std::chrono::duration_cast<std::chrono::minutes>(current_time - start_time).count();
+        if (elapsed_time >= 3) {
+            restartExecutable(window);
         }
         glClear(GL_COLOR_BUFFER_BIT);
         drawCollisionDots();
@@ -376,6 +315,25 @@ int main() {
         glfwPollEvents();
     }
     glfwTerminate();
-    return 0;
+    return;
+}
 
+int main() {
+    if (!glfwInit()) {
+        std::cerr << "Failed to initialize GLFW" << std::endl;
+        return -1;
+    }
+    GLFWwindow* window;
+    window = glfwCreateWindow(500, 500, "N-Body Simulation", NULL, NULL);
+    if (!window) {
+        glfwTerminate();
+        std::cerr << "Failed to create GLFW window" << std::endl;
+        return -1;
+    }
+    glfwMakeContextCurrent(window);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    run(window);
+    std::cout << "Closing" << std::endl;
+    return 0;
 }
