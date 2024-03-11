@@ -15,7 +15,8 @@
                 "-lgdi32",
                 "-IC:/ProgramData/glfw/include",
                 "-LC:/ProgramData/glfw/lib",
-                "-mwindows"
+                "-fopenmp",
+                //"-mwindows"
             ],
             "group": {
                 "kind": "build",
