@@ -65,6 +65,6 @@ void computePosVel(
     double minVel, double maxVel, double minRadius, double maxRadius,
     std::mt19937& gen);
 
-void run(GLFWwindow* window);
+int run(GLFWwindow* window);
 
 #endif // SIMULATION_H

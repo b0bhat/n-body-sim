@@ -16,6 +16,7 @@ bool isSpacePressed() {
 void restartExecutable(GLFWwindow* window) {
     std::cout << "Restarting...\n";
     run(window);
+    return;
 }
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
@@ -182,11 +183,11 @@ void computePosVel(
     vy = sign * sin(velocity_angle) * vel_amount;
 }
 
-void run(GLFWwindow* window) {
+int run(GLFWwindow* window) {
     std::ifstream inputFile("settings.txt");
     if (!inputFile.is_open()) {
         std::cerr << "Error opening settings file." << std::endl;
-        return;
+        return 1;
     }
     double dt;
     int singleStart, numBodiesGenerator, collidingBodies, numMainBodies;
@@ -291,12 +292,12 @@ void run(GLFWwindow* window) {
     auto start_time = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window)) {
         if (isSpacePressed()) {
-            restartExecutable(window);
+            return 0;
         }
         auto current_time = std::chrono::steady_clock::now();
         auto elapsed_time = std::chrono::duration_cast<std::chrono::minutes>(current_time - start_time).count();
         if (elapsed_time >= 3) {
-            restartExecutable(window);
+            return 0;
         }
         glClear(GL_COLOR_BUFFER_BIT);
         drawCollisionDots();
@@ -315,7 +316,8 @@ void run(GLFWwindow* window) {
         glfwPollEvents();
     }
     glfwTerminate();
-    return;
+    std::cout << "Closing" << std::endl;
+    return 1;
 }
 
 int main() {
@@ -333,7 +335,13 @@ int main() {
     glfwMakeContextCurrent(window);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    run(window);
+    while (true) {
+        int result = run(window);
+        if (result != 0) {
+            return 0;
+        }
+    }
+        
     std::cout << "Closing" << std::endl;
     return 0;
 }

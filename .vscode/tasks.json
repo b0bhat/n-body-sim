@@ -14,7 +14,8 @@
                 "-lopengl32",
                 "-lgdi32",
                 "-IC:/ProgramData/glfw/include",
-                "-LC:/ProgramData/glfw/lib"
+                "-LC:/ProgramData/glfw/lib",
+                "-mwindows"
             ],
             "group": {
                 "kind": "build",
