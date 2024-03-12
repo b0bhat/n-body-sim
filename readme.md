@@ -13,7 +13,7 @@ Run simulator.exe or compile with MinGW.
 ### Settings in settings.txt:
 - Time step value, set lower for slower and more precise simulation (double)
 - Single start point, set to 0 to disable, 1 to enable (int)
-- Number of minor mobile bodies generated, keep below 3000 (int)
+- Number of minor mobile bodies generated, keep below 10000 (int)
 - Delta in inital conditions for single start (double)
 - Body collisions, 0 for none, 1 for mobile bodies (int)
 - Number of primary masses, 0-3 (int)
@@ -32,6 +32,6 @@ Run simulator.exe or compile with MinGW.
 - Window restarts after 3 mins.
 
 ### Todo Ideas
-- More optimizations, approximate mean influence instead of calculating each individual body
+- Implement the Barnes-hut tree for more efficient calculations
 - using CUDA gpu for super fast calculations
 - Nicer looking points using an actual shader

@@ -38,8 +38,8 @@ struct Body {
 };
 
 struct CollisionPoint {
-    float x;
-    float y;
+    double x;
+    double y;
     double mass;
     std::chrono::time_point<std::chrono::steady_clock> timestamp;
 };
@@ -50,9 +50,9 @@ void restartExecutable(GLFWwindow* window);
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b);
 
-void calculateForce(const Body& p1, const Body& p2, double& fx, double& fy);
+// void calculateForce(const Body& p1, const Body& p2, double& fx, double& fy);
 
-void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles);
+// void handleCollisions(Body* particle, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles);
 
 void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt);
 

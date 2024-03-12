@@ -20,100 +20,89 @@ void restartExecutable(GLFWwindow* window) {
 }
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
-    int i = floor(h * 6);
-    float f = h * 6 - i;
+    float h6 = h * 6;
+    int i = floor(h6);
+    float f = h6 - i;
     float p = v * (1 - s);
     float q = v * (1 - f * s);
     float t = v * (1 - (1 - f) * s);
 
-    switch (i % 6) {
-        case 0: r = v, g = t, b = p; break;
-        case 1: r = q, g = v, b = p; break;
-        case 2: r = p, g = v, b = t; break;
-        case 3: r = p, g = q, b = v; break;
-        case 4: r = t, g = p, b = v; break;
-        case 5: r = v, g = p, b = q; break;
-    }
-}
+    static const float table[6][3] = {
+        {v, t, p},
+        {q, v, p},
+        {p, v, t},
+        {p, q, v},
+        {t, p, v},
+        {v, p, q}
+    };
 
-void calculateForce(const Body& p1, const Body& p2, double& fx, double& fy) {
-    double dx = p2.x - p1.x;
-    double dy = p2.y - p1.y;
-    double distance = std::max(std::sqrt(dx * dx + dy * dy), 0.1);
-    fx = 0.0;
-    fy = 0.0;
-    if (distance <= 1.0) {
-        double force = (G * p1.mass * p2.mass) / (distance * distance);
-        fx = force * (dx / distance);
-        fy = force * (dy / distance);
-    }
+    const float* chosen = table[i % 6];
+    r = chosen[0];
+    g = chosen[1];
+    b = chosen[2];
 }
 
 void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
     const size_t maxOrbitSize = 1000;
     const double squaredLimit = 1.5 * 1.5;
-    const size_t massiveParticlesSize = massiveParticles.size();
-    const double collisionThresholdSquared = 0.001 * 0.001;
-    bool collided = false;
+    const double collisionThreshold = 0.000001;
 
     #pragma omp parallel for
     for (size_t i = 0; i < mobileParticles.size(); ++i) {
         Body* particle = mobileParticles[i];
-        double particleX = particle->x;
-        double particleY = particle->y;
-
         if (!particle->alive)
             continue;
 
-        if (particle->collision) {
-            #pragma omp critical
-            for (auto& other : mobileParticles) {
-                if (particle == other || !other->alive) {
-                    continue;
+        double fx = 0.0, fy = 0.0;
+        std::vector<CollisionPoint> localCollisionPoints;
+
+        for (size_t j = 0; j < particles.size(); ++j) {
+            Body* other = &particles[j];
+            if (particle == other || !other->alive)
+                continue;
+
+            double dx = particle->x - other->x;
+            double dy = particle->y - other->y;
+            double distanceSquared = dx * dx + dy * dy;
+
+            if (particle->collision && other->mobile && distanceSquared < collisionThreshold) {
+                double totalMass = particle->mass + other->mass;
+                double invTotalMass = 1.0 / totalMass;
+                #pragma omp critical
+                {
+                    particle->vx = (particle->mass * particle->vx + other->mass * other->vx) * invTotalMass;
+                    particle->vy = (particle->mass * particle->vy + other->mass * other->vy) * invTotalMass;
+                    particle->mass = totalMass;
+                    other->alive = false;
+
+                    localCollisionPoints.emplace_back(CollisionPoint{particle->x, particle->y, totalMass, std::chrono::steady_clock::now()});
                 }
-                double dx = particleX - other->x;
-                double dy = particleY - other->y;
-                double distanceSquared = dx * dx + dy * dy;
-                if (distanceSquared < collisionThresholdSquared) {
-                    if (other->massive && !other->mobile) {
-                        particle->alive = false;
-                        break;
-                    } else {
-                        double totalMass = particle->mass + other->mass;
-                        particle->vx = (particle->mass * particle->vx + other->mass * other->vx) / totalMass;
-                        particle->vy = (particle->mass * particle->vy + other->mass * other->vy) / totalMass;
-                        particle->mass = totalMass; 
-                        other->alive = false;
-                        collided = true;
-                        CollisionPoint point;
-                        point.x = particle->x;
-                        point.y = particle->y;
-                        point.mass = totalMass;
-                        point.timestamp = std::chrono::steady_clock::now();
-                        collisionPoints.push_back(point);
-                        break;
-                    }
+                continue;
+            }
+
+            if (other->massive) {
+                double distance = std::max(std::sqrt(distanceSquared), 0.1);
+                if (distance <= 1.0) {
+                    double force = (G * particle->mass * other->mass) / (distance * distance);
+                    fx += force * (-dx / distance);
+                    fy += force * (-dy / distance);
                 }
             }
         }
 
-        double fx = 0.0, fy = 0.0;
-        for (size_t j = 0; j < massiveParticlesSize; ++j) {
-            Body* other = massiveParticles[j];
-            if (particle != other && other->alive) {
-                double partialFx, partialFy;
-                calculateForce(*particle, *other, partialFx, partialFy);
-                fx += partialFx;
-                fy += partialFy;
-            }
-        }
         double dtByMass = dt / particle->mass;
         double ax = fx * dtByMass;
         double ay = fy * dtByMass;
+
+        #pragma omp atomic
         particle->vx += ax;
+        #pragma omp atomic
         particle->vy += ay;
+        #pragma omp atomic
         particle->x += particle->vx * dt;
+        #pragma omp atomic
         particle->y += particle->vy * dt;
+
         particle->orbit.push_back({particle->x, particle->y});
         while (particle->orbit.size() > maxOrbitSize) {
             particle->orbit.erase(particle->orbit.begin());
@@ -121,9 +110,12 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         if ((particle->x * particle->x + particle->y * particle->y) > squaredLimit) {
             particle->alive = false;
         }
+        #pragma omp critical
+        {
+            collisionPoints.insert(collisionPoints.end(), localCollisionPoints.begin(), localCollisionPoints.end());
+        }
     }
 }
-
 
 void drawCollisionDots() {
     auto currentTime = std::chrono::steady_clock::now();
@@ -248,7 +240,7 @@ int run(GLFWwindow* window) {
         computePosVel(x, y, vx, vy, minVel, maxVel, minRadius, maxRadius, gen);
         double mass = mass_dist(gen);
         bool mobile = true;
-        bool massive = false;
+        bool massive = true;
         bool collision = false;
         if (collidingBodies == 1) {
             collision = true;
