@@ -44,6 +44,24 @@ struct CollisionPoint {
     std::chrono::time_point<std::chrono::steady_clock> timestamp;
 };
 
+struct OctreeNode {
+    float x, y;
+    float mass;
+    float cx, cy;
+    bool isLeaf;
+    OctreeNode* children[8];
+
+    OctreeNode(float _x, float _y) : x(_x), y(_y), mass(0), cx(0), cy(0), isLeaf(true) {
+        for (int i = 0; i < 8; ++i)
+            children[i] = nullptr;
+    }
+    
+    ~OctreeNode() {
+        for (int i = 0; i < 8; ++i)
+            delete children[i];
+    }
+};
+
 bool isSpacePressed();
 
 void restartExecutable(GLFWwindow* window);

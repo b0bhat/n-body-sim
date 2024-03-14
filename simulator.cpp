@@ -36,7 +36,8 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     }
 }
 
-void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
+
+void updateBodiesOld(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
     const size_t maxOrbitSize = 1000;
     const float squaredLimit = 1.5 * 1.5;
     const double collisionThreshold = 0.000001;
@@ -109,6 +110,137 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
             collisionPoints.insert(collisionPoints.end(), localCollisionPoints.begin(), localCollisionPoints.end());
         }
     }
+}
+
+void updateOctree(OctreeNode* root, const std::vector<Body>& particles) {
+    for (int i = 0; i < 8; ++i)
+        delete root->children[i];
+
+    root->mass = 0;
+    root->cx = 0;
+    root->cy = 0;
+    for (const Body& particle : particles) {
+        OctreeNode* node = root;
+        while (!node->isLeaf) {
+            int index = (particle.x <= node->x ? 0 : 1) + (particle.y <= node->y ? 0 : 2);
+            node = node->children[index];
+        }
+
+        node->mass = particle.mass;
+        node->cx = particle.x;
+        node->cy = particle.y;
+    }
+}
+
+
+void calculateForce(Body* particle, OctreeNode* node, float& fx, float& fy, float theta) {
+    float dx = node->cx - particle->x;
+    float dy = node->cy - particle->y;
+    float distanceSquared = dx * dx + dy * dy;
+    float distance = sqrt(distanceSquared);
+
+    if (distance == 0) return;
+
+    if (node->isLeaf || (node->mass / distanceSquared < theta)) {
+        float force = G * particle->mass * node->mass / distanceSquared;
+        fx += force * (dx / distance);
+        fy += force * (dy / distance);
+    } else {
+        for (int i = 0; i < 8; ++i) {
+           if (node->children[i] != nullptr) {
+                float childForceX = 0.0f, childForceY = 0.0f;
+                calculateForce(particle, node->children[i], childForceX, childForceY, theta);
+                fx += childForceX;
+                fy += childForceY;
+            }
+        }
+    }
+}
+
+void updateBodies(std::vector<Body>& particles, OctreeNode* root, double dt, float theta) {
+    const size_t maxOrbitSize = 1000;
+    const float squaredLimit = 1.5f * 1.5f;
+    const double collisionThreshold = 0.000001;
+
+    updateOctree(root, particles);
+
+    for (Body& particle : particles) {
+        if (!particle.alive)
+            continue;
+
+        float fx = 0.0f, fy = 0.0f;
+
+        calculateForce(&particle, root, fx, fy, theta);
+
+        float dtByMass = dt / particle.mass;
+        float ax = fx * dtByMass;
+        float ay = fy * dtByMass;
+
+        particle.vx += ax;
+        particle.vy += ay;
+
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
+
+        particle.orbit.push_back({particle.x, particle.y});
+        while (particle.orbit.size() > maxOrbitSize) {
+            particle.orbit.erase(particle.orbit.begin());
+        }
+
+        if ((particle.x * particle.x + particle.y * particle.y) > squaredLimit) {
+            particle.alive = false;
+        }
+    }
+}
+
+OctreeNode* buildOctree(const std::vector<Body>& particles, float minX, float minY, float maxX, float maxY) {
+    if (particles.empty())
+        return nullptr;
+
+    OctreeNode* node = new OctreeNode((minX + maxX) / 2, (minY + maxY) / 2);
+
+    if (particles.size() == 1) {
+        const Body& particle = particles.front();
+        node->mass = particle.mass;
+        node->cx = particle.x;
+        node->cy = particle.y;
+    } else {
+        float midX = (minX + maxX) / 2;
+        float midY = (minY + maxY) / 2;
+        std::vector<Body> quadrant[8];
+
+        for (const Body& particle : particles) {
+            int index = (particle.x <= midX ? 0 : 1) + (particle.y <= midY ? 0 : 2);
+            quadrant[index].push_back(particle);
+        }
+        for (int i = 0; i < 8; ++i) {
+            float childMinX = (i % 2 == 0 ? minX : midX);
+            float childMinY = (i < 2 ? minY : midY);
+            float childMaxX = (i % 2 == 0 ? midX : maxX);
+            float childMaxY = (i < 2 ? midY : maxY);
+
+            node->children[i] = buildOctree(quadrant[i], childMinX, childMinY, childMaxX, childMaxY);
+
+            if (node->children[i] != nullptr) {
+                node->mass += node->children[i]->mass;
+                node->cx += node->children[i]->cx * node->children[i]->mass;
+                node->cy += node->children[i]->cy * node->children[i]->mass;
+            }
+        }
+
+        if (node->mass != 0) {
+            node->cx /= node->mass;
+            node->cy /= node->mass;
+        }
+    }
+
+    node->isLeaf = (node->mass != 0 && particles.size() == 1);
+
+    return node;
+}
+
+void destroyOctree(OctreeNode* root) {
+    delete root;
 }
 
 void drawCollisionDots() {
@@ -284,6 +416,11 @@ int run(GLFWwindow* window) {
     auto start_time = std::chrono::steady_clock::now();
     double lastTime = glfwGetTime();
     int frameCount = 0;
+    bool orbit = true;
+    if (particles.size() > 2000) {
+        orbit = false;
+    }
+    OctreeNode* root = buildOctree(particles, -2, -2, 2, 2);
     while (!glfwWindowShouldClose(window)) {
         if (isSpacePressed()) {
             return 0;
@@ -297,7 +434,7 @@ int run(GLFWwindow* window) {
         drawCollisionDots();
         frameCount++;
         for (const auto& particle : particles) {
-            drawOrbit(particle, trailAlpha);
+            if (orbit)drawOrbit(particle, trailAlpha);
             if (particle.alive) {
                 glPointSize(std::log(particle.mass)/3);
                 glBegin(GL_POINTS);
@@ -306,7 +443,8 @@ int run(GLFWwindow* window) {
                 glEnd();
             }
         }
-        updateBodies(particles, massiveParticles, mobileParticles, dt);
+        updateBodies(particles, root, dt, 0.9);
+
         glfwSwapBuffers(window);
         glfwPollEvents();
         double currentTime = glfwGetTime();
@@ -318,6 +456,7 @@ int run(GLFWwindow* window) {
         }
     }
     glfwTerminate();
+    delete root;
     std::cout << "Closing" << std::endl;
     return 1;
 }
