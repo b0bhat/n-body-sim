@@ -22,24 +22,24 @@ struct Color {
 };
 
 struct Body {
-    double x, y;
-    double vx, vy;
+    float x, y;
+    float vx, vy;
     double mass;
     bool mobile;
     bool massive;
     bool collision;
     bool alive;
     Color color;
-    std::vector<std::pair<double, double>> orbit;
+    std::vector<std::pair<float, float>> orbit;
     mutable double currentAlpha = 0.8;
 
-    Body(double x_, double y_, double vx_, double vy_, double mass_, bool mobile_, bool massive_, bool collision_, bool alive_, Color color_) :
+    Body(float x_, float y_, float vx_, float vy_, double mass_, bool mobile_, bool massive_, bool collision_, bool alive_, Color color_) :
             x(x_), y(y_), vx(vx_), vy(vy_), mass(mass_), mobile(mobile_), massive(massive_), collision(collision_), alive(alive_), color(color_) {}
 };
 
 struct CollisionPoint {
-    double x;
-    double y;
+    float x;
+    float y;
     double mass;
     std::chrono::time_point<std::chrono::steady_clock> timestamp;
 };
@@ -61,8 +61,8 @@ void drawCollisionDots();
 void drawOrbit(const Body& particle, float trailAlpha);
 
 void computePosVel(
-    double& x, double& y, double& vx, double& vy, 
-    double minVel, double maxVel, double minRadius, double maxRadius,
+    float& x, float& y, float& vx, float& vy, 
+    float minVel, float maxVel, float minRadius, float maxRadius,
     std::mt19937& gen);
 
 int run(GLFWwindow* window);

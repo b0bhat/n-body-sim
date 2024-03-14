@@ -16,7 +16,7 @@
                 "-IC:/ProgramData/glfw/include",
                 "-LC:/ProgramData/glfw/lib",
                 "-fopenmp",
-                //"-mwindows"
+                "-mwindows"
             ],
             "group": {
                 "kind": "build",

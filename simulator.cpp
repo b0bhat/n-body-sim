@@ -20,31 +20,25 @@ void restartExecutable(GLFWwindow* window) {
 }
 
 void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
-    float h6 = h * 6;
-    int i = floor(h6);
-    float f = h6 - i;
+    int i = floor(h * 6);
+    float f = h * 6 - i;
     float p = v * (1 - s);
     float q = v * (1 - f * s);
     float t = v * (1 - (1 - f) * s);
 
-    static const float table[6][3] = {
-        {v, t, p},
-        {q, v, p},
-        {p, v, t},
-        {p, q, v},
-        {t, p, v},
-        {v, p, q}
-    };
-
-    const float* chosen = table[i % 6];
-    r = chosen[0];
-    g = chosen[1];
-    b = chosen[2];
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
 }
 
 void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
     const size_t maxOrbitSize = 1000;
-    const double squaredLimit = 1.5 * 1.5;
+    const float squaredLimit = 1.5 * 1.5;
     const double collisionThreshold = 0.000001;
 
     #pragma omp parallel for
@@ -53,7 +47,7 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         if (!particle->alive)
             continue;
 
-        double fx = 0.0, fy = 0.0;
+        float fx = 0.0, fy = 0.0;
         std::vector<CollisionPoint> localCollisionPoints;
 
         for (size_t j = 0; j < particles.size(); ++j) {
@@ -61,13 +55,13 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
             if (particle == other || !other->alive)
                 continue;
 
-            double dx = particle->x - other->x;
-            double dy = particle->y - other->y;
+            float dx = particle->x - other->x;
+            float dy = particle->y - other->y;
             double distanceSquared = dx * dx + dy * dy;
 
             if (particle->collision && other->mobile && distanceSquared < collisionThreshold) {
-                double totalMass = particle->mass + other->mass;
-                double invTotalMass = 1.0 / totalMass;
+                float totalMass = particle->mass + other->mass;
+                float invTotalMass = 1.0 / totalMass;
                 #pragma omp critical
                 {
                     particle->vx = (particle->mass * particle->vx + other->mass * other->vx) * invTotalMass;
@@ -81,18 +75,18 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
             }
 
             if (other->massive) {
-                double distance = std::max(std::sqrt(distanceSquared), 0.1);
+                float distance = std::max(distanceSquared, 0.1);
                 if (distance <= 1.0) {
-                    double force = (G * particle->mass * other->mass) / (distance * distance);
+                    float force = (G * particle->mass * other->mass) / (distance);
                     fx += force * (-dx / distance);
                     fy += force * (-dy / distance);
                 }
             }
         }
 
-        double dtByMass = dt / particle->mass;
-        double ax = fx * dtByMass;
-        double ay = fy * dtByMass;
+        float dtByMass = dt / particle->mass;
+        float ax = fx * dtByMass;
+        float ay = fy * dtByMass;
 
         #pragma omp atomic
         particle->vx += ax;
@@ -138,14 +132,14 @@ void drawCollisionDots() {
 void drawOrbit(const Body& particle, float trailAlpha) {
     glBegin(GL_LINE_STRIP);
     for (size_t i = 0; i < particle.orbit.size(); ++i) {
-        double alpha = particle.currentAlpha - std::pow(trailAlpha, static_cast<double>(i) / particle.orbit.size());
+        float alpha = particle.currentAlpha - std::pow(trailAlpha, static_cast<float>(i) / particle.orbit.size());
         //std::cout << alpha << std::endl;
         glColor4f(particle.color.r, particle.color.g, particle.color.b, alpha);
         glVertex2d(particle.orbit[i].first, particle.orbit[i].second);
     }
     glEnd();
     if (particle.alive) {
-        double trailLength = std::sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
+        float trailLength = std::sqrt(particle.vx * particle.vx + particle.vy * particle.vy);
         glBegin(GL_LINE_STRIP);
         size_t startIndex = particle.orbit.size() > trailLength ? particle.orbit.size() - trailLength : 0;
         for (size_t i = startIndex; i < particle.orbit.size(); ++i) {
@@ -159,21 +153,21 @@ void drawOrbit(const Body& particle, float trailAlpha) {
 }
 
 void computePosVel(
-    double& x, double& y, double& vx, double& vy, 
-    double minVel, double maxVel, double minRadius, double maxRadius,
+    float& x, float& y, float& vx, float& vy, 
+    float minVel, float maxVel, float minRadius, float maxRadius,
     std::mt19937& gen) {
-    std::uniform_real_distribution<double> vel_dist(minVel, maxVel);
-    std::uniform_real_distribution<double> radius_dist(minRadius, maxRadius);
-    std::uniform_real_distribution<double> angle_dist(0.0, 2.0 * pi);
-    double radius = radius_dist(gen);
-    double angle = angle_dist(gen);
+    std::uniform_real_distribution<float> vel_dist(minVel, maxVel);
+    std::uniform_real_distribution<float> radius_dist(minRadius, maxRadius);
+    std::uniform_real_distribution<float> angle_dist(0.0, 2.0 * pi);
+    float radius = radius_dist(gen);
+    float angle = angle_dist(gen);
 
     x = radius * cos(angle);
     y = radius * sin(angle);
-    double tangent_angle = atan2(y, x) + pi / 2;
-    std::uniform_real_distribution<double> velocity_angle_dist(tangent_angle - pi / 5, tangent_angle + pi / 5);
-    double velocity_angle = velocity_angle_dist(gen);
-    double vel_amount = vel_dist(gen);
+    float tangent_angle = atan2(y, x) + pi / 2;
+    std::uniform_real_distribution<float> velocity_angle_dist(tangent_angle - pi / 5, tangent_angle + pi / 5);
+    float velocity_angle = velocity_angle_dist(gen);
+    float vel_amount = vel_dist(gen);
     std::uniform_int_distribution<int> sign_gen(0, 1);
     int sign = sign_gen(gen) * 2 - 1;
     vx = sign * cos(velocity_angle) * vel_amount;
@@ -190,7 +184,7 @@ int run(GLFWwindow* window) {
     int singleStart, numBodiesGenerator, collidingBodies, numMainBodies;
     double singleStartDelta;
     float trailAlpha;
-    double minMass, maxMass, minHueSize, maxHueSize, minVel, maxVel, minRadius, maxRadius;
+    float minMass, maxMass, minHueSize, maxHueSize, minVel, maxVel, minRadius, maxRadius;
     inputFile >> dt >> singleStart >> numBodiesGenerator >> collidingBodies >> numMainBodies
         >> singleStartDelta >> trailAlpha >> minMass >> maxMass >> minHueSize >> maxHueSize
         >> minVel >> maxVel >> minRadius >> maxRadius;
@@ -216,17 +210,17 @@ int run(GLFWwindow* window) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<double> mass_dist(minMass, maxMass);
-    std::uniform_real_distribution<double> hue_size_dist(minHueSize, maxHueSize);
+    std::uniform_real_distribution<float> hue_size_dist(minHueSize, maxHueSize);
 
-    std::uniform_real_distribution<double> color_dist(0.3, 1.0);
-    double x_s, y_s, vx_s, vy_s;
+    std::uniform_real_distribution<float> color_dist(0.3, 1.0);
+    float x_s, y_s, vx_s, vy_s;
     computePosVel(x_s, y_s, vx_s, vy_s, minVel, maxVel, minRadius, maxRadius, gen);
-    std::uniform_real_distribution<double> x_dist(x_s, x_s + singleStartDelta);
-    std::uniform_real_distribution<double> y_dist(y_s, y_s + singleStartDelta);
+    std::uniform_real_distribution<float> x_dist(x_s, x_s + singleStartDelta);
+    std::uniform_real_distribution<float> y_dist(y_s, y_s + singleStartDelta);
 
-    double colorStart = color_dist(gen);
-    double colorEnd = colorStart + hue_size_dist(gen);
-    std::uniform_real_distribution<double> hue_range_dist(colorStart, colorEnd);
+    float colorStart = color_dist(gen);
+    float colorEnd = colorStart + hue_size_dist(gen);
+    std::uniform_real_distribution<float> hue_range_dist(colorStart, colorEnd);
 
     std::vector<Body> particles;
     std::vector<Body*> massiveParticles;
@@ -236,7 +230,7 @@ int run(GLFWwindow* window) {
 
     for (int i = 0; i < numBodiesGenerator; ++i) {
         
-        double x, y, vx, vy;
+        float x, y, vx, vy;
         computePosVel(x, y, vx, vy, minVel, maxVel, minRadius, maxRadius, gen);
         double mass = mass_dist(gen);
         bool mobile = true;
@@ -248,6 +242,7 @@ int run(GLFWwindow* window) {
         bool alive = true;
         float hue = hue_range_dist(gen);
         float lightness = color_dist(gen);
+        float saturation = color_dist(gen);
         if (singleStart == 1) {
             x = x_dist(gen);
             y = y_dist(gen);
@@ -260,7 +255,7 @@ int run(GLFWwindow* window) {
             hue = colorStart + hue * (colorEnd - colorStart);
         }
         float r, g, b;
-        hsvToRgb(hue, 1.0f, lightness, r, g, b);
+        hsvToRgb(hue, saturation, lightness, r, g, b);
         Color color = Color(r,g,b);
         particles.emplace_back(x, y, vx, vy, mass, mobile, massive, collision, alive, color);
     }
