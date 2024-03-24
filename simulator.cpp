@@ -36,7 +36,7 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     }
 }
 
-void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt) {
+void updateBodies(std::vector<Body>& particles, std::vector<Body*>& mobileParticles, double dt) {
     const size_t maxOrbitSize = 1000;
     const float squaredLimit = 1.5 * 1.5;
     const double collisionThreshold = 0.000001;
@@ -97,7 +97,7 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
         #pragma omp atomic
         particle->y += particle->vy * dt;
 
-        particle->orbit.push_back({particle->x, particle->y});
+        particle->orbit.push_back({particle->x, particle->y}); // expensive operation
         while (particle->orbit.size() > maxOrbitSize) {
             particle->orbit.erase(particle->orbit.begin());
         }
@@ -223,7 +223,7 @@ int run(GLFWwindow* window) {
     std::uniform_real_distribution<float> hue_range_dist(colorStart, colorEnd);
 
     std::vector<Body> particles;
-    std::vector<Body*> massiveParticles;
+    // std::vector<Body*> massiveParticles;
     std::vector<Body*> mobileParticles;
 
     collisionPoints.clear();
@@ -269,11 +269,11 @@ int run(GLFWwindow* window) {
         particles.emplace_back(0.0, 0.15, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
     }
 
-    for (auto& particle : particles) {
-        if (particle.massive) {
-            massiveParticles.push_back(&particle);
-        }
-    }
+    // for (auto& particle : particles) {
+    //     if (particle.massive) {
+    //         massiveParticles.push_back(&particle);
+    //     }
+    // }
 
     for (auto& particle : particles) {
         if (particle.mobile) {
@@ -306,7 +306,7 @@ int run(GLFWwindow* window) {
                 glEnd();
             }
         }
-        updateBodies(particles, massiveParticles, mobileParticles, dt);
+        updateBodies(particles, mobileParticles, dt);
         glfwSwapBuffers(window);
         glfwPollEvents();
         double currentTime = glfwGetTime();
