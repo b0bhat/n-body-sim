@@ -1,4 +1,12 @@
 # n-body simulator
+
+<img src="pics/yellow.png" alt="image" width="150" height="150">
+<img src="pics/green.png" alt="image" width="150" height="150">
+<img src="pics/blue.png" alt="image" width="150" height="150">
+<img src="pics/purple.png" alt="image" width="150" height="150">
+
+!!! Quadtree/Barnes-Hut branch rework in progress !!!
+
 A simulator to study the n-body problem and how extremely minor changes in intial conditions propagate into massive changes.
  Also the orbits can create some really cool shapes.
 
@@ -10,8 +18,6 @@ Run simulator.exe or compile with MinGW.
 
 https://github.com/b0bhat/n-body-sim/assets/59947126/992da626-cc7d-4583-b607-a844f949f998
 
-
-![image](preview.png)
 
 ### Settings in settings.txt:
 - Time step value, set lower for slower and more precise simulation (double)
@@ -29,6 +35,8 @@ https://github.com/b0bhat/n-body-sim/assets/59947126/992da626-cc7d-4583-b607-a84
 - Max velocity range
 - Min radius from center
 - Max radius from center
+
+![image](preview.png)
 
 ### Notes:
 - Using Gmm/r^2 as the formula, with G reduced in order to scale the simulation down.
