@@ -37,8 +37,6 @@ https://github.com/b0bhat/n-body-sim/assets/59947126/992da626-cc7d-4583-b607-a84
 - Min radius from center
 - Max radius from center
 
-![image](preview.png)
-
 ### Notes:
 - Using Gmm/r^2 as the formula, with G reduced in order to scale the simulation down.
 - Window restarts after 3 mins.
@@ -47,3 +45,5 @@ https://github.com/b0bhat/n-body-sim/assets/59947126/992da626-cc7d-4583-b607-a84
 - Implement the Barnes-hut tree for more efficient calculations
 - using CUDA gpu for super fast calculations
 - Nicer looking points using an actual shader
+
+<img src="pics/preview.png" alt="image" height="500">
