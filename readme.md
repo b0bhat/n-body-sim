@@ -8,9 +8,8 @@ For instability from initial conditions, enable single start point and set a low
 Written to practice C++, using the GLFW library with OpenGL for a simple renderer.
 Run simulator.exe or compile with MinGW.
 
+https://github.com/b0bhat/n-body-sim/assets/59947126/992da626-cc7d-4583-b607-a844f949f998
 
-
-https://github.com/b0bhat/n-body-sim/assets/59947126/96f37f84-6c04-4a05-bcc4-24fb626e8154
 
 ![image](preview.png)
 
