@@ -1,9 +1,10 @@
 # n-body simulator
-
-<img src="pics/yellow.png" alt="image" width="150" height="150">
-<img src="pics/green.png" alt="image" width="150" height="150">
-<img src="pics/blue.png" alt="image" width="150" height="150">
-<img src="pics/purple.png" alt="image" width="150" height="150">
+<div style="display: flex;">
+<img src="pics/yellow.png" alt="image" width="200" height="200">
+<img src="pics/green.png" alt="image" width="200" height="200">
+<img src="pics/blue.png" alt="image" width="200" height="200">
+<img src="pics/purple.png" alt="image" width="200" height="200">
+</div>
 
 !!! Quadtree/Barnes-Hut branch rework in progress !!!
 
