@@ -36,35 +36,35 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     }
 }
 
-void updateBodies(std::vector<Body>& particles, Quadtree* qt, double dt) {
-    const float squaredLimit = 1.5 * 1.5;
-    const double collisionThreshold = 0.000001;
+// void updateBodies(std::vector<Body>& particles, Quadtree* qt, double dt) {
+//     const float squaredLimit = 1.5 * 1.5;
+//     const double collisionThreshold = 0.000001;
 
-    for (auto& particle : particles) {
-        if (!particle.alive) continue;
+//     for (auto& particle : particles) {
+//         if (!particle.alive) continue;
 
-        float fx = 0.0, fy = 0.0;
-        computeForce(qt, &particle, fx, fy);
+//         float fx = 0.0, fy = 0.0;
+//         computeForce(qt, &particle, fx, fy);
 
-        float dtByMass = dt / particle.mass;
-        float ax = fx * dtByMass;
-        float ay = fy * dtByMass;
+//         float dtByMass = dt / particle.mass;
+//         float ax = fx * dtByMass;
+//         float ay = fy * dtByMass;
 
-        particle.vx += ax;
-        particle.vy += ay;
-        particle.x += particle.vx * dt;
-        particle.y += particle.vy * dt;
+//         particle.vx += ax;
+//         particle.vy += ay;
+//         particle.x += particle.vx * dt;
+//         particle.y += particle.vy * dt;
 
-        particle.orbit.push_back({particle.x, particle.y});
-        while (particle.orbit.size() > 1000) {
-            particle.orbit.erase(particle.orbit.begin());
-        }
+//         particle.orbit.push_back({particle.x, particle.y});
+//         while (particle.orbit.size() > 1000) {
+//             particle.orbit.erase(particle.orbit.begin());
+//         }
 
-        if ((particle.x * particle.x + particle.y * particle.y) > squaredLimit) {
-            particle.alive = false;
-        }
-    }
-}
+//         if ((particle.x * particle.x + particle.y * particle.y) > squaredLimit) {
+//             particle.alive = false;
+//         }
+//     }
+// }
 
 void drawCollisionDots() {
     auto currentTime = std::chrono::steady_clock::now();
@@ -107,41 +107,100 @@ void drawOrbit(const Body& particle, float trailAlpha) {
     }
 }
 
-void computeForce(Quadtree* qt, Body* p, float& fx, float& fy) {
-    if (!qt->contains(p)) {
-        std::cout << "1" << std::endl;
-        float dx = qt->x - p->x;
-        float dy = qt->y - p->y;
-        double distanceSquared = dx * dx + dy * dy;
-        float distance = std::sqrt(distanceSquared);
-        if (qt->width / distance < 1.0) {
-            std::cout << "op1" << std::endl;
-            std::cout << qt->body->mass << std::endl;
-            double force = (G * p->mass * qt->body->mass) / distanceSquared;
-            std::cout << force << std::endl;
-            fx += force * dx / distance;
-            fy += force * dy / distance;
-        } else {
-            std::cout << "op2" << std::endl;
-            if (qt->divided) {
-                std::cout << "op2.1" << std::endl;
-                computeForce(qt->nw, p, fx, fy);
-                computeForce(qt->ne, p, fx, fy);
-                computeForce(qt->sw, p, fx, fy);
-                computeForce(qt->se, p, fx, fy);
-            } else if (qt->body != nullptr && qt->body != p) {
-                std::cout << "op2.2" << std::endl;
-                float dx = qt->body->x - p->x;
-                float dy = qt->body->y - p->y;
-                double distanceSquared = dx * dx + dy * dy;
-                double distance = std::sqrt(distanceSquared);
-                double force = (G * p->mass * qt->body->mass) / distanceSquared;
-                std::cout << force << std::endl;
-                fx += force * dx / distance;
-                fy += force * dy / distance;
-            }
-        }std::cout << "end" << std::endl;
+// void computeForce(Quadtree* qt, Body* p, float& fx, float& fy) {
+//     if (!qt->contains(p)) {
+//         std::cout << "1" << std::endl;
+//         float dx = qt->x - p->x;
+//         float dy = qt->y - p->y;
+//         double distanceSquared = dx * dx + dy * dy;
+//         float distance = std::sqrt(distanceSquared);
+//         if (qt->width / distance < 1.0) {
+//             std::cout << "op1" << std::endl;
+//             std::cout << qt->body->mass << std::endl;
+//             double force = (G * p->mass * qt->body->mass) / distanceSquared;
+//             std::cout << force << std::endl;
+//             fx += force * dx / distance;
+//             fy += force * dy / distance;
+//         } else {
+//             std::cout << "op2" << std::endl;
+//             if (qt->divided) {
+//                 std::cout << "op2.1" << std::endl;
+//                 computeForce(qt->nw, p, fx, fy);
+//                 computeForce(qt->ne, p, fx, fy);
+//                 computeForce(qt->sw, p, fx, fy);
+//                 computeForce(qt->se, p, fx, fy);
+//             } else if (qt->body != nullptr && qt->body != p) {
+//                 std::cout << "op2.2" << std::endl;
+//                 float dx = qt->body->x - p->x;
+//                 float dy = qt->body->y - p->y;
+//                 double distanceSquared = dx * dx + dy * dy;
+//                 double distance = std::sqrt(distanceSquared);
+//                 double force = (G * p->mass * qt->body->mass) / distanceSquared;
+//                 std::cout << force << std::endl;
+//                 fx += force * dx / distance;
+//                 fy += force * dy / distance;
+//             }
+//         }std::cout << "end" << std::endl;
+//     }
+// }
+
+void updateBodies(std::vector<Body>& particles, Quadtree& qt, double dt) {
+    const float squaredLimit = 1.5 * 1.5;
+    const double collisionThreshold = 0.000001;
+
+    for (auto& particle : particles) {
+        if (!particle.alive) continue;
+
+        calculateForce(&particle, qt, dt);
+
+        particle.orbit.push_back({particle.x, particle.y});
+        while (particle.orbit.size() > 1000) {
+            particle.orbit.erase(particle.orbit.begin());
+        }
+
+        if ((particle.x * particle.x + particle.y * particle.y) > squaredLimit) {
+            particle.alive = false;
+        }
     }
+}
+
+void calculateForce(Body* body, const Quadtree& quadtree, float dt) {
+    if (!quadtree.divided) {
+        float dx = quadtree.centerOfMassX - body->x;
+        float dy = quadtree.centerOfMassY - body->y;
+        float distanceSquared = dx * dx + dy * dy;
+        if (distanceSquared > 0.2f) {
+            float distance = sqrt(distanceSquared);
+            float force = G * body->mass * quadtree.totalMass / distanceSquared;
+            std::cout << force << std::endl;
+            body->x += force * dx / distance;
+            body->y += force * dy / distance;
+        }
+        return;
+    }
+
+    float dx = quadtree.centerOfMassX - body->x;
+    float dy = quadtree.centerOfMassY - body->y;
+    float distanceSquared = dx * dx + dy * dy;
+
+    float nodeSize = std::max(quadtree.width, quadtree.height);
+    float ratio = nodeSize / sqrt(distanceSquared);
+
+    if (ratio < dt) {
+        if (distanceSquared > 0.0f) {
+            float distance = sqrt(distanceSquared);
+            float force = G * body->mass * quadtree.totalMass / distanceSquared;
+            std::cout << force << std::endl;
+            body->x += force * dx / distance;
+            body->y += force * dy / distance;
+        }
+        return;
+    }
+
+    if (quadtree.nw != nullptr) calculateForce(body, *quadtree.nw, dt);
+    if (quadtree.ne != nullptr) calculateForce(body, *quadtree.ne, dt);
+    if (quadtree.sw != nullptr) calculateForce(body, *quadtree.sw, dt);
+    if (quadtree.se != nullptr) calculateForce(body, *quadtree.se, dt);
 }
 
 void computePosVel(
@@ -287,6 +346,7 @@ int run(GLFWwindow* window) {
         for (auto& particle : particles) {
             qt.insert(&particle);
         }
+        qt.updateCenterOfMass();
 
         for (const auto& particle : particles) {
             drawOrbit(particle, trailAlpha);
@@ -298,7 +358,7 @@ int run(GLFWwindow* window) {
                 glEnd();
             }
         }
-        updateBodies(particles, &qt, dt);
+        updateBodies(particles, qt, dt);
         glfwSwapBuffers(window);
         glfwPollEvents();
         double currentTime = glfwGetTime();

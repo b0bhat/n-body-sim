@@ -14,6 +14,7 @@
 
 const double pi = std::acos(-1.0);
 const double G = 6.67430e-7;
+const int MAX_BODIES_PER_NODE = 8;
 
 struct Color {
     float r, g, b, a;
@@ -40,14 +41,19 @@ struct Body {
 struct Quadtree {
     float x, y;
     float width, height;
-    Body* body = nullptr;
+    float centerOfMassX, centerOfMassY;
+    float totalMass;
+    std::vector<Body*> bodies;
     bool divided = false;
     Quadtree* nw = nullptr;
     Quadtree* ne = nullptr;
     Quadtree* sw = nullptr;
     Quadtree* se = nullptr;
 
-    Quadtree(float x_, float y_, float w_, float h_) : x(x_), y(y_), width(w_), height(h_) {}
+    Quadtree(float x_, float y_, float w_, float h_) : x(x_), y(y_), width(w_), height(h_), 
+                                                        centerOfMassX(x_ + w_ / 2.0f), 
+                                                        centerOfMassY(y_ + h_ / 2.0f), 
+                                                        totalMass(0.0f) {}
 
     ~Quadtree() {
     }
@@ -55,19 +61,18 @@ struct Quadtree {
     void insert(Body* p) {
         if (!contains(p)) return;
 
-        if (!divided && body == nullptr) {
-            body = p;
-            return;
-        }
+        bodies.push_back(p);
 
-        if (!divided) {
+        if (!divided && bodies.size() > MAX_BODIES_PER_NODE) {
             subdivide();
+            for (auto& body : bodies) {
+                if (nw->contains(body)) nw->insert(body);
+                else if (ne->contains(body)) ne->insert(body);
+                else if (sw->contains(body)) sw->insert(body);
+                else se->insert(body);
+            }
+            bodies.clear();
         }
-
-        if (nw->contains(p)) nw->insert(p);
-        else if (ne->contains(p)) ne->insert(p);
-        else if (sw->contains(p)) sw->insert(p);
-        else se->insert(p);
     }
 
     bool contains(const Body* p) const {
@@ -84,6 +89,42 @@ struct Quadtree {
         se = new Quadtree(x + halfWidth, y + halfHeight, halfWidth, halfHeight);
 
         divided = true;
+    }
+
+    void updateCenterOfMass() {
+        if (!divided) {
+            totalMass = 0.0f;
+            centerOfMassX = 0.0f;
+            centerOfMassY = 0.0f;
+            for (const auto& body : bodies) {
+                centerOfMassX += body->x * body->mass;
+                centerOfMassY += body->y * body->mass;
+                totalMass += body->mass;
+            }
+            if (totalMass > 0.0f) {
+                centerOfMassX /= totalMass;
+                centerOfMassY /= totalMass;
+            } else {
+                centerOfMassX = x + width / 2.0f;
+                centerOfMassY = y + height / 2.0f;
+            }
+        } else {
+            nw->updateCenterOfMass();
+            ne->updateCenterOfMass();
+            sw->updateCenterOfMass();
+            se->updateCenterOfMass();
+            
+            totalMass = nw->totalMass + ne->totalMass + sw->totalMass + se->totalMass;
+            if (totalMass > 0.0f) {
+                centerOfMassX = (nw->centerOfMassX * nw->totalMass + ne->centerOfMassX * ne->totalMass +
+                                 sw->centerOfMassX * sw->totalMass + se->centerOfMassX * se->totalMass) / totalMass;
+                centerOfMassY = (nw->centerOfMassY * nw->totalMass + ne->centerOfMassY * ne->totalMass +
+                                 sw->centerOfMassY * sw->totalMass + se->centerOfMassY * se->totalMass) / totalMass;
+            } else {
+                centerOfMassX = x + width / 2.0f;
+                centerOfMassY = y + height / 2.0f;
+            }
+        }
     }
 };
 
@@ -109,6 +150,8 @@ void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParti
 void drawCollisionDots();
 
 void computeForce(Quadtree* qt, Body* p, float& fx, float& fy);
+
+void calculateForce(Body* body, const Quadtree& quadtree, float dt);
 
 void drawOrbit(const Body& particle, float trailAlpha);
 
