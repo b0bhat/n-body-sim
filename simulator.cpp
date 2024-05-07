@@ -36,77 +36,32 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b) {
     }
 }
 
-void updateBodies(std::vector<Body>& particles, std::vector<Body*>& mobileParticles, double dt) {
-    const size_t maxOrbitSize = 1000;
+void updateBodies(std::vector<Body>& particles, Quadtree* qt, double dt) {
     const float squaredLimit = 1.5 * 1.5;
     const double collisionThreshold = 0.000001;
 
-    #pragma omp parallel for
-    for (size_t i = 0; i < mobileParticles.size(); ++i) {
-        Body* particle = mobileParticles[i];
-        if (!particle->alive)
-            continue;
+    for (auto& particle : particles) {
+        if (!particle.alive) continue;
 
         float fx = 0.0, fy = 0.0;
-        std::vector<CollisionPoint> localCollisionPoints;
+        computeForce(qt, &particle, fx, fy);
 
-        for (size_t j = 0; j < particles.size(); ++j) {
-            Body* other = &particles[j];
-            if (particle == other || !other->alive)
-                continue;
-
-            float dx = particle->x - other->x;
-            float dy = particle->y - other->y;
-            double distanceSquared = dx * dx + dy * dy;
-
-            if (particle->collision && other->mobile && distanceSquared < collisionThreshold) {
-                float totalMass = particle->mass + other->mass;
-                float invTotalMass = 1.0 / totalMass;
-                #pragma omp critical
-                {
-                    particle->vx = (particle->mass * particle->vx + other->mass * other->vx) * invTotalMass;
-                    particle->vy = (particle->mass * particle->vy + other->mass * other->vy) * invTotalMass;
-                    particle->mass = totalMass;
-                    other->alive = false;
-
-                    localCollisionPoints.emplace_back(CollisionPoint{particle->x, particle->y, totalMass, std::chrono::steady_clock::now()});
-                }
-                continue;
-            }
-
-            if (other->massive) {
-                float distance = std::max(distanceSquared, 0.1);
-                if (distance <= 1.0) {
-                    float force = (G * particle->mass * other->mass) / (distance);
-                    fx += force * (-dx / distance);
-                    fy += force * (-dy / distance);
-                }
-            }
-        }
-
-        float dtByMass = dt / particle->mass;
+        float dtByMass = dt / particle.mass;
         float ax = fx * dtByMass;
         float ay = fy * dtByMass;
 
-        #pragma omp atomic
-        particle->vx += ax;
-        #pragma omp atomic
-        particle->vy += ay;
-        #pragma omp atomic
-        particle->x += particle->vx * dt;
-        #pragma omp atomic
-        particle->y += particle->vy * dt;
+        particle.vx += ax;
+        particle.vy += ay;
+        particle.x += particle.vx * dt;
+        particle.y += particle.vy * dt;
 
-        particle->orbit.push_back({particle->x, particle->y}); // expensive operation
-        while (particle->orbit.size() > maxOrbitSize) {
-            particle->orbit.erase(particle->orbit.begin());
+        particle.orbit.push_back({particle.x, particle.y});
+        while (particle.orbit.size() > 1000) {
+            particle.orbit.erase(particle.orbit.begin());
         }
-        if ((particle->x * particle->x + particle->y * particle->y) > squaredLimit) {
-            particle->alive = false;
-        }
-        #pragma omp critical
-        {
-            collisionPoints.insert(collisionPoints.end(), localCollisionPoints.begin(), localCollisionPoints.end());
+
+        if ((particle.x * particle.x + particle.y * particle.y) > squaredLimit) {
+            particle.alive = false;
         }
     }
 }
@@ -149,6 +104,43 @@ void drawOrbit(const Body& particle, float trailAlpha) {
         glEnd();
     } else {
         particle.currentAlpha = std::max(particle.currentAlpha - 0.01, 0.0);
+    }
+}
+
+void computeForce(Quadtree* qt, Body* p, float& fx, float& fy) {
+    if (!qt->contains(p)) {
+        std::cout << "1" << std::endl;
+        float dx = qt->x - p->x;
+        float dy = qt->y - p->y;
+        double distanceSquared = dx * dx + dy * dy;
+        float distance = std::sqrt(distanceSquared);
+        if (qt->width / distance < 1.0) {
+            std::cout << "op1" << std::endl;
+            std::cout << qt->body->mass << std::endl;
+            double force = (G * p->mass * qt->body->mass) / distanceSquared;
+            std::cout << force << std::endl;
+            fx += force * dx / distance;
+            fy += force * dy / distance;
+        } else {
+            std::cout << "op2" << std::endl;
+            if (qt->divided) {
+                std::cout << "op2.1" << std::endl;
+                computeForce(qt->nw, p, fx, fy);
+                computeForce(qt->ne, p, fx, fy);
+                computeForce(qt->sw, p, fx, fy);
+                computeForce(qt->se, p, fx, fy);
+            } else if (qt->body != nullptr && qt->body != p) {
+                std::cout << "op2.2" << std::endl;
+                float dx = qt->body->x - p->x;
+                float dy = qt->body->y - p->y;
+                double distanceSquared = dx * dx + dy * dy;
+                double distance = std::sqrt(distanceSquared);
+                double force = (G * p->mass * qt->body->mass) / distanceSquared;
+                std::cout << force << std::endl;
+                fx += force * dx / distance;
+                fy += force * dy / distance;
+            }
+        }std::cout << "end" << std::endl;
     }
 }
 
@@ -269,12 +261,6 @@ int run(GLFWwindow* window) {
         particles.emplace_back(0.0, 0.15, 0.0, 0.0, 1e6, false, true, false, true, Color(1.0, 1.0, 1.0));
     }
 
-    // for (auto& particle : particles) {
-    //     if (particle.massive) {
-    //         massiveParticles.push_back(&particle);
-    //     }
-    // }
-
     for (auto& particle : particles) {
         if (particle.mobile) {
             mobileParticles.push_back(&particle);
@@ -296,6 +282,12 @@ int run(GLFWwindow* window) {
         glClear(GL_COLOR_BUFFER_BIT);
         drawCollisionDots();
         frameCount++;
+
+        Quadtree qt(0, 0, 100, 100); 
+        for (auto& particle : particles) {
+            qt.insert(&particle);
+        }
+
         for (const auto& particle : particles) {
             drawOrbit(particle, trailAlpha);
             if (particle.alive) {
@@ -306,7 +298,7 @@ int run(GLFWwindow* window) {
                 glEnd();
             }
         }
-        updateBodies(particles, mobileParticles, dt);
+        updateBodies(particles, &qt, dt);
         glfwSwapBuffers(window);
         glfwPollEvents();
         double currentTime = glfwGetTime();

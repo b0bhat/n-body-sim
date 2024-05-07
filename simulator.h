@@ -37,6 +37,56 @@ struct Body {
             x(x_), y(y_), vx(vx_), vy(vy_), mass(mass_), mobile(mobile_), massive(massive_), collision(collision_), alive(alive_), color(color_) {}
 };
 
+struct Quadtree {
+    float x, y;
+    float width, height;
+    Body* body = nullptr;
+    bool divided = false;
+    Quadtree* nw = nullptr;
+    Quadtree* ne = nullptr;
+    Quadtree* sw = nullptr;
+    Quadtree* se = nullptr;
+
+    Quadtree(float x_, float y_, float w_, float h_) : x(x_), y(y_), width(w_), height(h_) {}
+
+    ~Quadtree() {
+    }
+
+    void insert(Body* p) {
+        if (!contains(p)) return;
+
+        if (!divided && body == nullptr) {
+            body = p;
+            return;
+        }
+
+        if (!divided) {
+            subdivide();
+        }
+
+        if (nw->contains(p)) nw->insert(p);
+        else if (ne->contains(p)) ne->insert(p);
+        else if (sw->contains(p)) sw->insert(p);
+        else se->insert(p);
+    }
+
+    bool contains(const Body* p) const {
+        return p->x >= x && p->x < x + width && p->y >= y && p->y < y + height;
+    }
+
+    void subdivide() {
+        float halfWidth = width / 2.0f;
+        float halfHeight = height / 2.0f;
+
+        nw = new Quadtree(x, y, halfWidth, halfHeight);
+        ne = new Quadtree(x + halfWidth, y, halfWidth, halfHeight);
+        sw = new Quadtree(x, y + halfHeight, halfWidth, halfHeight);
+        se = new Quadtree(x + halfWidth, y + halfHeight, halfWidth, halfHeight);
+
+        divided = true;
+    }
+};
+
 struct CollisionPoint {
     float x;
     float y;
@@ -57,6 +107,8 @@ void hsvToRgb(float h, float s, float v, float &r, float &g, float &b);
 void updateBodies(std::vector<Body>& particles, std::vector<Body*>& massiveParticles, std::vector<Body*>& mobileParticles, double dt);
 
 void drawCollisionDots();
+
+void computeForce(Quadtree* qt, Body* p, float& fx, float& fy);
 
 void drawOrbit(const Body& particle, float trailAlpha);
 
